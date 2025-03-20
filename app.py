@@ -23,7 +23,12 @@ import cv2
 import mediapipe as mp
 import numpy as np
 
+
 app = Flask(__name__)
+
+
+
+
 
 CORS(app)  # Allow cross-origin requests for all routes
 
