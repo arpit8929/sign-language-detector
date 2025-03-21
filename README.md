@@ -1,51 +1,51 @@
-# sign-language-detector
-This project aims to create a sign language translator using machine learning techniques and Python programming. The application utilizes various modules, primarily Mediapipe, Landmark, and Random Forest algorithms to interpret and translate sign language gestures into text or spoken language.
+#Sign Language Detector
 
-## Project Overview
-Sign language is a crucial form of communication for individuals with hearing impairments. This project focuses on bridging the communication gap by creating a tool that can interpret sign language gestures in real-time and convert them into understandable text or speech.
-  
-## Features
- - Real-time sign language recognition: Captures hand gestures using the Mediapipe library to track landmarks and movements.
- - Landmark analysis: Utilizes Landmark module to extract key points and gestures from hand movements.
- - Machine learning translation: Employs Random Forest algorithm to classify and interpret gestures into corresponding text or spoken language.
-  
-## Usage
-  1. Installation:
-  ```
-   #Clone the repository
-   git clone https://github.com/SohamPrajapati/sign-language-detector.git
-   
-   #Navigate to the project directory
-   cd sign-language-detector
-  ```
-  
-  2. **Install the required dependencies** using the following command:
+This project is designed to translate sign language into text or speech using machine learning and Python. It leverages MediaPipe, hand landmarks, and a Random Forest classifier to recognize and interpret sign language gestures in real-time.
 
-  ```bash
-    pip install -r requirements.txt
-  ```
-   
-  3. Run the application:
-  ```
-   python sign-language-detector.py
-  ```
-   
-  3. Interact with the translator :
-   - Activate the camera for real-time gesture recognition.
-   - Perform sign language gestures in front of the camera.
+#Overview
 
-## Screenshots
-  ### Home Page
-![Screenshot (50)](https://github.com/SohamPrajapati/sign-language-detector/assets/95955650/1a2d2170-b481-4a38-b233-ca31cebaa405)
+Sign language is a vital communication method for individuals with hearing impairments. This project aims to bridge communication gaps by providing a tool that detects and translates sign language gestures into readable text or spoken words in real time.
 
-  ### About Page
-![Screenshot (104)](https://github.com/SohamPrajapati/sign-language-detector/assets/95955650/362fcbaa-1cc4-4889-b6d9-ed46eea28be2)
+#Features
 
-  ### ASL Language
-![hand-signs-of-the-ASL-Language.png](https://github.com/SohamPrajapati/sign-language-detector/blob/master/hand-signs-of-the-ASL-Language.png)
- 
-## Project Report
- For detailed insights, analysis, and findings, refer to the Project Report provided in the repository.
-  
-## Contributing
- Contributions are welcome! If you'd like to contribute to this project, feel free to open issues, create pull requests, or reach out to discuss potential improvements.
+Real-time Gesture Recognition: Utilizes MediaPipe to track hand movements and detect gestures.
+
+Landmark-Based Analysis: Extracts key hand points to differentiate between various sign language gestures.
+
+Machine Learning Model: Implements a Random Forest classifier to accurately classify and translate gestures into corresponding text or speech output.
+
+How to Use
+
+Installation
+
+Clone the repository:
+
+git clone https://github.com/arpit8929/sign-language-detector.git
+
+Navigate to the project directory:
+
+cd sign-language-detector
+
+Install the required dependencies:
+
+pip install -r requirements.txt
+
+Running the Application
+
+To start the sign language detector, run the following command:
+
+python app.py
+
+Interacting with the Translator
+
+Enable the camera to begin real-time sign recognition.
+
+Perform sign language gestures in front of the camera for interpretation.
+
+Project Report
+
+For an in-depth explanation of the methodology, findings, and performance analysis, refer to the Project Report available in the repository.
+
+Contributions
+
+Contributions are welcome! If you’d like to improve this project, feel free to open issues, submit pull requests, or share your ideas for enhancements.
