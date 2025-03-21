@@ -3,6 +3,8 @@
 
 from socket import SocketIO
 from wsgiref.simple_server import WSGIServer
+from google.oauth2 import id_token
+from google.auth.transport import requests
 from flask import Flask, jsonify, render_template, url_for, redirect, flash, session, request, Response
 from flask_cors import CORS
 from flask_sqlalchemy import SQLAlchemy
@@ -14,7 +16,7 @@ from wtforms import StringField, PasswordField, SubmitField
 from wtforms.validators import InputRequired, Length, ValidationError, Email, EqualTo
 from flask_bcrypt import Bcrypt
 from datetime import datetime
-from itsdangerous.url_safe import URLSafeTimedSerializer as Serializer
+from itsdangerous import URLSafeTimedSerializer as Serializer
 from flask_mail import Message, Mail
 import random
 import re
@@ -126,6 +128,20 @@ def login():
         else:
             flash(f'Login unsuccessful for {form.username.data}.', category='danger')
     return render_template('login.html', form=form)
+
+@app.route('/google_signin', methods=['POST'])
+def google_signin():
+    token = request.json.get('id_token')
+    try:
+        idinfo = id_token.verify_oauth2_token(token, requests.Request(), 'http://182448434731-4ijvod5bhfroun0ci0am5s7l9mitno8i.apps.googleusercontent.com')
+        userid = idinfo['sub']
+        # Check if user exists in your database and create a new user if necessary
+        # Log the user in
+        return jsonify({'status': 'success'}), 200
+    except ValueError:
+        # Invalid token
+        return jsonify({'status': 'error', 'message': 'Invalid token'}), 400
+
 # ----------------------------------------------------
 
 
