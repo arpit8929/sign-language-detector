@@ -360,6 +360,7 @@ def generate_frames():
 
         ret, frame = cap.read()
         if not ret:
+            print("Failed to capture frame")
             break
 
         H, W, _ = frame.shape
@@ -376,9 +377,9 @@ def generate_frames():
                     mp_drawing_styles.get_default_hand_connections_style())
 
             # ... Rest of the hand landmark processing and prediction code ...
-            data_aux = []
-            x_ = []
-            y_ = []
+            # data_aux = []
+            # x_ = []
+            # y_ = []
 
             for i in range(len(hand_landmarks.landmark)):
                 x = hand_landmarks.landmark[i].x
@@ -402,7 +403,7 @@ def generate_frames():
             try:
                 prediction = model.predict([np.asarray(data_aux)])
                 predicted_character = labels_dict[int(prediction[0])]
-                response_data = {'characters': predicted_character}
+                # response_data = {'characters': predicted_character}
                 print("Predicted character : ",predicted_character)
 
                 cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 0, 0), 4)
@@ -410,9 +411,12 @@ def generate_frames():
                 # flash(f'Predicted Character is {predicted_character}.', category='success')
 
             except Exception as e:
-                   pass
+                print("Prediction error:", e)
                    #print(e)
                    # Handle prediction error
+                   
+        else:
+            print("No hand landmarks detected")            
 
         ret, buffer = cv2.imencode('.jpg', frame)
         frame = buffer.tobytes()
