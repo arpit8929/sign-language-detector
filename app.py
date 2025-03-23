@@ -133,7 +133,7 @@ def login():
 def google_signin():
     token = request.json.get('id_token')
     try:
-        idinfo = id_token.verify_oauth2_token(token, requests.Request(), 'http://182448434731-4ijvod5bhfroun0ci0am5s7l9mitno8i.apps.googleusercontent.com')
+        idinfo = id_token.verify_oauth2_token(token, requests.Request(), '')
         userid = idinfo['sub']
         # Check if user exists in your database and create a new user if necessary
         # Log the user in
