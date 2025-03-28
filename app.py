@@ -1,10 +1,10 @@
 # I am using mediapipe as a hand landmark processing and prediction and landmark detector and a Random Forest classifier as sign classifier.
 
-
+import requests
 from socket import SocketIO
 from wsgiref.simple_server import WSGIServer
 from google.oauth2 import id_token
-from google.auth.transport import requests
+
 from flask import Flask, jsonify, render_template, url_for, redirect, flash, session, request, Response
 from flask_cors import CORS
 from flask_sqlalchemy import SQLAlchemy
@@ -169,6 +169,7 @@ def about():
 @login_required
 def logout():
     session.clear()
+    session.pop("github_user", None)
     logout_user()
     flash('Account Logged out successfully.', category='success')
     return redirect(url_for('login'))
@@ -426,7 +427,94 @@ def generate_frames():
 def video_feed():
     return Response(generate_frames(), mimetype='multipart/x-mixed-replace; boundary=frame')
 
-# -----------------------------  end  ---------------------------
+
+
+
+
+
+# GitHub OAuth Credentials
+GITHUB_CLIENT_ID = "Ov23liIxOiVVsWo9mDuJ"
+GITHUB_CLIENT_SECRET = "44f356374a98c70dd8421b76075e78566fda6d30"
+GITHUB_AUTH_URL = "https://github.com/login/oauth/authorize"
+GITHUB_TOKEN_URL = "https://github.com/login/oauth/access_token"
+GITHUB_USER_API = "https://api.github.com/user"
+
+
+@app.route("/github/login")
+def github_login():
+    github_redirect_url = f"{GITHUB_AUTH_URL}?client_id={GITHUB_CLIENT_ID}&scope=user"
+    return redirect(github_redirect_url)
+
+@app.route("/github/callback")
+def github_callback():
+    code = request.args.get("code")
+    if not code:
+        flash("GitHub authorization failed!", category="danger")
+        return redirect(url_for("login"))
+
+    # Exchange code for access token
+    token_response = requests.post(
+        "https://github.com/login/oauth/access_token",
+        headers={"Accept": "application/json"},
+        data={"client_id": GITHUB_CLIENT_ID, "client_secret": GITHUB_CLIENT_SECRET, "code": code},
+    )
+    token_json = token_response.json()
+    access_token = token_json.get("access_token")
+
+    if not access_token:
+        flash("Failed to retrieve access token!", category="danger")
+        return redirect(url_for("login"))
+
+    # Get user details from GitHub API
+    user_response = requests.get(
+        "https://api.github.com/user",
+        headers={"Authorization": f"token {access_token}"}
+    )
+    user_data = user_response.json()
+
+    github_username = user_data.get("login")
+    github_email = user_data.get("email")  # Might be None if private
+    avatar_url = user_data.get("avatar_url")
+
+    # If GitHub email is None, fetch emails separately
+    if github_email is None:
+        email_response = requests.get(
+            "https://api.github.com/user/emails",
+            headers={"Authorization": f"token {access_token}"}
+        )
+        emails = email_response.json()
+        for email in emails:
+            if email.get("primary") and email.get("verified"):
+                github_email = email.get("email")
+                break
+
+    # If email is still None, generate a placeholder
+    if github_email is None:
+        github_email = f"{github_username}@github.com"
+
+    # Check if the user already exists in the database
+    existing_user = User.query.filter_by(email=github_email).first()
+
+    if existing_user:
+        login_user(existing_user)
+        session["name"] = existing_user.username
+        session["logged_in"] = True
+        flash("Login successful!", category="success")
+    else:
+        # Create a new user
+        new_user = User(username=github_username, email=github_email, password="")
+        db.session.add(new_user)
+        db.session.commit()
+
+        login_user(new_user)
+        session["name"] = github_username
+        session["logged_in"] = True
+        flash("Account created & logged in successfully!", category="success")
+
+    return redirect(url_for("dashboard"))  # ✅ Redirect to dashboard
+
+
+
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)
