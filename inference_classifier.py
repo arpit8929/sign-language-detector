@@ -14,9 +14,13 @@ cap = cv2.VideoCapture(0)
 # Initialize MediaPipe Hand Tracking
 mp_hands = mp.solutions.hands
 mp_drawing = mp.solutions.drawing_utils
-mp_drawing_styles = mp.solutions.drawing_styles
 
-hands = mp_hands.Hands(static_image_mode=True, min_detection_confidence=0.3)
+hands = mp_hands.Hands(
+    static_image_mode=False,
+    max_num_hands=1,
+    min_detection_confidence=0.5,
+    min_tracking_confidence=0.7
+)
 
 # Labels dictionary
 labels_dict = {
@@ -26,33 +30,27 @@ labels_dict = {
     29: 'I Love You', 30: 'Sorry', 31: 'Please', 32: 'You are welcome.', 33: 'SPACE'
 }
 
-# Text storage
+# Storage for detected text
 recognized_text = ""
 prev_time = time.time()
-char_delay = 0.5  # Time threshold for character separation
-word_delay = 1.5   # Time threshold for word separation
+char_delay = 0.5
+word_delay = 1.5
 
 while True:
-    data_aux = []
-    x_, y_ = [], []
-
     ret, frame = cap.read()
     if not ret:
         break
 
     H, W, _ = frame.shape
     frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-
     results = hands.process(frame_rgb)
+
     if results.multi_hand_landmarks:
         for hand_landmarks in results.multi_hand_landmarks:
-            mp_drawing.draw_landmarks(
-                frame,
-                hand_landmarks,
-                mp_hands.HAND_CONNECTIONS,
-                mp_drawing_styles.get_default_hand_landmarks_style(),
-                mp_drawing_styles.get_default_hand_connections_style())
+            mp_drawing.draw_landmarks(frame, hand_landmarks, mp_hands.HAND_CONNECTIONS)
 
+            # Extract landmark coordinates
+            x_, y_, data_aux = [], [], []
             for i in range(len(hand_landmarks.landmark)):
                 x_.append(hand_landmarks.landmark[i].x)
                 y_.append(hand_landmarks.landmark[i].y)
@@ -61,42 +59,45 @@ while True:
                 data_aux.append(hand_landmarks.landmark[i].x - min(x_))
                 data_aux.append(hand_landmarks.landmark[i].y - min(y_))
 
-        x1, y1 = int(min(x_) * W) - 10, int(min(y_) * H) - 10
-        x2, y2 = int(max(x_) * W) - 10, int(max(y_) * H) - 10
+            # Show hand coordinates (for debugging)
+            for idx, (x, y) in enumerate(zip(x_, y_)):
+                cx, cy = int(x * W), int(y * H)
+                cv2.circle(frame, (cx, cy), 5, (0, 255, 0), -1)
+                cv2.putText(frame, str(idx), (cx, cy - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 0), 1)
 
-        try:
-            prediction = model.predict([np.asarray(data_aux)])
-            predicted_character = labels_dict[int(prediction[0])]
+            # Bounding box
+            x1, y1 = int(min(x_) * W) - 10, int(min(y_) * H) - 10
+            x2, y2 = int(max(x_) * W) + 10, int(max(y_) * H) + 10
+            cv2.rectangle(frame, (x1, y1), (x2, y2), (255, 0, 0), 2)
 
-            current_time = time.time()
-            time_diff = current_time - prev_time
+            # Ensure correct feature count for model
+            if len(data_aux) == 42:
+                prediction = model.predict([np.asarray(data_aux)])
+                predicted_character = labels_dict[int(prediction[0])]
 
-            # Detect space
-            if predicted_character == 'SPACE':
-                if recognized_text and recognized_text[-1] != ' ':
-                    recognized_text += ' '
-            else:
-                if time_diff > word_delay:
-                    recognized_text += ' ' + predicted_character
-                elif time_diff > char_delay:
-                    recognized_text += predicted_character
+                # Handling text formation
+                current_time = time.time()
+                time_diff = current_time - prev_time
 
-            prev_time = current_time
+                if predicted_character == 'SPACE':
+                    if recognized_text and recognized_text[-1] != ' ':
+                        recognized_text += ' '
+                else:
+                    if time_diff > word_delay:
+                        recognized_text += ' ' + predicted_character
+                    elif time_diff > char_delay:
+                        recognized_text += predicted_character
 
-            # Draw bounding box and text
-            cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 0, 0), 4)
-            cv2.putText(frame, predicted_character, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 1.3, (0, 0, 0), 3,
-                        cv2.LINE_AA)
+                prev_time = current_time
 
-        except Exception:
-            pass
+                # Display prediction
+                cv2.putText(frame, predicted_character, (x1, y1 - 20), cv2.FONT_HERSHEY_SIMPLEX, 1.5, (0, 255, 0), 3)
 
-    # Display recognized text on screen
-    cv2.putText(frame, "Text: " + recognized_text, (20, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 0, 0), 2)
+    # Display recognized text
+    cv2.putText(frame, "Text: " + recognized_text, (30, H - 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
 
     cv2.imshow('frame', frame)
 
-    # Quit on pressing 'q'
     if cv2.waitKey(1) & 0xFF == ord('q'):
         break
 
