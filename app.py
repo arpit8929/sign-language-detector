@@ -4,14 +4,14 @@ import requests
 from socket import SocketIO
 from wsgiref.simple_server import WSGIServer
 from google.oauth2 import id_token
+import time
 
 from flask import Flask, jsonify, render_template, url_for, redirect, flash, session, request, Response
 from flask_cors import CORS
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import UserMixin, login_user, LoginManager, login_required, logout_user, current_user
 from flask_wtf import FlaskForm
-import socketio
-# sio = socketio.Server(async_mode='gevent')
+from flask_socketio import SocketIO, emit
 from wtforms import StringField, PasswordField, SubmitField
 from wtforms.validators import InputRequired, Length, ValidationError, Email, EqualTo
 from flask_bcrypt import Bcrypt
@@ -27,10 +27,29 @@ import numpy as np
 
 
 app = Flask(__name__)
+app.config['SECRET_KEY'] = 'thisisasecretkey'
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///database.db'
 
+# Initialize SQLAlchemy and other extensions
+db = SQLAlchemy(app)
+serializer = Serializer(app.config['SECRET_KEY'])
+app.app_context().push()
 
+# Initialize SocketIO with proper configuration
+socketio = SocketIO(app, 
+    ping_timeout=10,
+    ping_interval=5,
+    cors_allowed_origins="*",
+    async_mode='threading',
+    logger=True,
+    engineio_logger=True,
+    namespace='/'
+)
 
-
+# Variables for tracking predictions
+last_prediction = None
+prediction_start_time = None
+PREDICTION_THRESHOLD = 2.0  # 2 seconds hold time for confirmation
 
 CORS(app)  # Allow cross-origin requests for all routes
 
@@ -39,9 +58,6 @@ bcrypt = Bcrypt(app)
 
 # Database Model Setup
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///database.db'
-app.config['SECRET_KEY'] = 'thisisasecretkey'
-serializer = Serializer(app.config['SECRET_KEY'])
-db = SQLAlchemy(app)
 app.app_context().push()
 
 
@@ -341,87 +357,118 @@ try:
 except Exception as e:
     print("Error loading the model:", e)
     model = None
-@app.route('/generate_frames', methods=['POST'])
+@app.route('/generate_frames', methods=['GET', 'POST'])
 def generate_frames():
     cap = cv2.VideoCapture(0)
     mp_hands = mp.solutions.hands
     mp_drawing = mp.solutions.drawing_utils
     mp_drawing_styles = mp.solutions.drawing_styles
-
-    hands = mp_hands.Hands(static_image_mode=True,min_detection_confidence=0.3)
-
-    # labels_dict = {0: 'A', 1: 'B', 2: 'C'}
+    hands = mp_hands.Hands(static_image_mode=True, min_detection_confidence=0.3)
+    
     labels_dict = {0: 'A', 1: 'B', 2: 'C', 3: 'D', 4: 'E', 5: 'F', 6: 'G', 7: 'H', 8: 'I', 9: 'J', 10: 'K', 11: 'L', 12: 'M',
                13: 'N', 14: 'O', 15: 'P', 16: 'Q', 17: 'R', 18: 'S', 19: 'T', 20: 'U', 21: 'V', 22: 'W', 23: 'X', 24: 'Y', 25: 'Z', 26: 'Hello', 27: 'Done', 28: 'Thank You', 29: 'I Love you', 30: 'Sorry', 31: 'Please', 32: 'You are welcome.' }
-
+    
+    global last_prediction, prediction_start_time
+    
     while True:
-        data_aux = []
-        x_ = []
-        y_ = []
+        try:
+            data_aux = []
+            x_ = []
+            y_ = []
 
-        ret, frame = cap.read()
-        if not ret:
-            print("Failed to capture frame")
-            break
+            ret, frame = cap.read()
+            if not ret:
+                print("Failed to capture frame")
+                continue
 
-        H, W, _ = frame.shape
-        frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            H, W, _ = frame.shape
+            frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
 
-        results = hands.process(frame_rgb)
-        if results.multi_hand_landmarks:
-            for hand_landmarks in results.multi_hand_landmarks:
-                mp_drawing.draw_landmarks(
-                    frame,
-                    hand_landmarks,
-                    mp_hands.HAND_CONNECTIONS,
-                    mp_drawing_styles.get_default_hand_landmarks_style(),
-                    mp_drawing_styles.get_default_hand_connections_style())
+            results = hands.process(frame_rgb)
+            if results.multi_hand_landmarks:
+                for hand_landmarks in results.multi_hand_landmarks:
+                    mp_drawing.draw_landmarks(
+                        frame,
+                        hand_landmarks,
+                        mp_hands.HAND_CONNECTIONS,
+                        mp_drawing_styles.get_default_hand_landmarks_style(),
+                        mp_drawing_styles.get_default_hand_connections_style())
 
-            # ... Rest of the hand landmark processing and prediction code ...
-            # data_aux = []
-            # x_ = []
-            # y_ = []
+                    # Extract landmark coordinates
+                    for i in range(len(hand_landmarks.landmark)):
+                        x = hand_landmarks.landmark[i].x
+                        y = hand_landmarks.landmark[i].y
+                        x_.append(x)
+                        y_.append(y)
 
-            for i in range(len(hand_landmarks.landmark)):
-                x = hand_landmarks.landmark[i].x
-                y = hand_landmarks.landmark[i].y
+                    for i in range(len(hand_landmarks.landmark)):
+                        x = hand_landmarks.landmark[i].x
+                        y = hand_landmarks.landmark[i].y
+                        data_aux.append(x - min(x_))
+                        data_aux.append(y - min(y_))
 
-                x_.append(x)
-                y_.append(y)
+                    x1 = int(min(x_) * W) - 10
+                    y1 = int(min(y_) * H) - 10
+                    x2 = int(max(x_) * W) - 10
+                    y2 = int(max(y_) * H) - 10
 
-            for i in range(len(hand_landmarks.landmark)):
-                x = hand_landmarks.landmark[i].x
-                y = hand_landmarks.landmark[i].y
-                data_aux.append(x - min(x_))
-                data_aux.append(y - min(y_))
+                    try:
+                        if len(data_aux) == 42:  # Ensure we have the correct number of features
+                            prediction = model.predict([np.asarray(data_aux)])
+                            predicted_character = labels_dict[int(prediction[0])]
+                            print(f"Detected sign: {predicted_character}")
+                            
+                            current_time = time.time()
+                            
+                            # Check if this is a new prediction
+                            if predicted_character != last_prediction:
+                                last_prediction = predicted_character
+                                prediction_start_time = current_time
+                                print(f"New sign detected: {predicted_character}")
+                            elif prediction_start_time:
+                                time_held = current_time - prediction_start_time
+                                if time_held >= PREDICTION_THRESHOLD:
+                                    # If the same sign has been held for 2 seconds, emit it
+                                    print(f"Emitting sign after {time_held:.1f}s hold: {predicted_character}")
+                                    try:
+                                        # Emit the sign to all connected clients
+                                        socketio.emit('predicted_character', 
+                                                    {'character': predicted_character},
+                                                    namespace='/')
+                                        print(f"Successfully emitted: {predicted_character}")
+                                        # Reset for next prediction
+                                        last_prediction = None
+                                        prediction_start_time = None
+                                    except Exception as e:
+                                        print(f"Error emitting sign: {str(e)}")
+                                else:
+                                    # Show progress
+                                    progress = int((time_held / PREDICTION_THRESHOLD) * 100)
+                                    cv2.putText(frame, f"Hold: {progress}%", (10, 30), 
+                                              cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
 
-            x1 = int(min(x_) * W) - 10
-            y1 = int(min(y_) * H) - 10
+                            # Draw bounding box and prediction
+                            cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 0, 0), 4)
+                            cv2.putText(frame, predicted_character, (x1, y1 - 10),
+                                      cv2.FONT_HERSHEY_SIMPLEX, 1.3, (0, 0, 0), 3, cv2.LINE_AA)
 
-            x2 = int(max(x_) * W) - 10
-            y2 = int(max(y_) * H) - 10
+                    except Exception as e:
+                        print(f"Prediction error: {str(e)}")
+                        continue
+            else:
+                # Reset prediction tracking when no hand is detected
+                if last_prediction:
+                    print("Hand detection lost, resetting prediction")
+                    last_prediction = None
+                    prediction_start_time = None
 
-            try:
-                prediction = model.predict([np.asarray(data_aux)])
-                predicted_character = labels_dict[int(prediction[0])]
-                # response_data = {'characters': predicted_character}
-                print("Predicted character : ",predicted_character)
+            ret, buffer = cv2.imencode('.jpg', frame)
+            frame = buffer.tobytes()
+            yield (b'--frame\r\n'b'Content-Type: image/jpeg\r\n\r\n' + frame + b'\r\n')
 
-                cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 0, 0), 4)
-                cv2.putText(frame, predicted_character, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 1.3, (0, 0, 0), 3,cv2.LINE_AA)
-                # flash(f'Predicted Character is {predicted_character}.', category='success')
-
-            except Exception as e:
-                print("Prediction error:", e)
-                   #print(e)
-                   # Handle prediction error
-                   
-        else:
-            print("No hand landmarks detected")            
-
-        ret, buffer = cv2.imencode('.jpg', frame)
-        frame = buffer.tobytes()
-        yield (b'--frame\r\n'b'Content-Type: image/jpeg\r\n\r\n' + frame + b'\r\n')
+        except Exception as e:
+            print(f"Frame processing error: {str(e)}")
+            continue
 
 @app.route('/video_feed')
 def video_feed():
@@ -513,8 +560,26 @@ def github_callback():
 
     return redirect(url_for("dashboard"))  # ✅ Redirect to dashboard
 
+@socketio.on('connect', namespace='/')
+def handle_connect():
+    print("Client connected to WebSocket")
+    try:
+        print(f"New client connected with ID: {request.sid}")
+        socketio.emit('connection_response', {'status': 'Connected successfully'}, room=request.sid, namespace='/')
+    except Exception as e:
+        print(f"Error in handle_connect: {e}")
 
+@socketio.on('disconnect', namespace='/')
+def handle_disconnect():
+    print(f"Client disconnected from WebSocket. ID: {request.sid}")
 
+@socketio.on('error', namespace='/')
+def handle_error(error):
+    print(f"WebSocket error: {error}")
+
+@socketio.on_error_default
+def default_error_handler(e):
+    print(f"WebSocket default error handler: {str(e)}")
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    socketio.run(app, host='0.0.0.0', port=5000, debug=True, allow_unsafe_werkzeug=True)

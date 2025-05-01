@@ -30,6 +30,63 @@
             animation: DRR;
             animation-duration: 3s;
         }
+
+        .dashboard-container {
+            display: flex;
+            justify-content: space-around;
+            align-items: flex-start;
+            padding: 20px;
+            margin-top: 20px;
+        }
+
+        .camera-section {
+            flex: 1;
+            max-width: 640px;
+        }
+
+        .message-section {
+            flex: 1;
+            max-width: 400px;
+            margin-left: 20px;
+            background: rgba(255, 255, 255, 0.9);
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+        }
+
+        .message-box {
+            width: 100%;
+            min-height: 150px;
+            border: 2px solid #ccc;
+            border-radius: 5px;
+            padding: 10px;
+            margin-bottom: 10px;
+            font-size: 18px;
+            background: white;
+        }
+
+        .controls {
+            display: flex;
+            gap: 10px;
+        }
+
+        .control-btn {
+            padding: 8px 15px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+
+        .backspace-btn {
+            background-color: #dc3545;
+            color: white;
+        }
+
+        .clear-btn {
+            background-color: #6c757d;
+            color: white;
+        }
     </style>
     <script type="text/javascript">
         // Function to hide the flash message after a specific interval
@@ -118,47 +175,147 @@
     {% endif %}
     {% endwith %}
 
-    <div class="under">
-        <button id="startCameraButton" class="btn btn-outline-light my-2">Start Camera</button>
-        <button id="closeCameraButton" style="display: none;" class="btn btn-outline-light my-2">Close Camera</button>
-        <h1>Camera Stream</h1>
-        <div id="cameraFeedContainer" style="display: none;">
-            <img id="cameraFeed" src="">
+    <div class="dashboard-container">
+        <div class="camera-section">
+            <button id="startCameraButton" class="btn btn-outline-light my-2">Start Camera</button>
+            <button id="closeCameraButton" style="display: none;" class="btn btn-outline-light my-2">Close Camera</button>
+            <h1>Camera Stream</h1>
+            <div id="cameraFeedContainer" style="display: none;">
+                <img id="cameraFeed" src="">
+            </div>
         </div>
-        <!-- <h1 id="predicted-char">Predicted Character: </h1> -->
-        <!-- <h1 id="predicted-char">Predicted character:-{{character}}</h1> -->
-        <!-- <h1 id="predicted-char"></h1> -->
+
+        <div class="message-section">
+            <h2>Detected Signs</h2>
+            <div id="messageBox" class="message-box" contenteditable="true"></div>
+            <div class="controls">
+                <button id="backspaceBtn" class="control-btn backspace-btn">Backspace</button>
+                <button id="clearBtn" class="control-btn clear-btn">Clear All</button>
+            </div>
+        </div>
     </div>
 
-    <!-- Add a div to display the detected characters -->
-<!-- <h1 id="detected-characters">Detected Characters: </h1> -->
-
-
     <script>
+        let socket = null;
         const startCameraButton = document.getElementById('startCameraButton');
         const closeCameraButton = document.getElementById('closeCameraButton');
         const cameraFeed = document.getElementById('cameraFeed');
         const cameraFeedContainer = document.getElementById('cameraFeedContainer');
+        const messageBox = document.getElementById('messageBox');
+        const backspaceBtn = document.getElementById('backspaceBtn');
+        const clearBtn = document.getElementById('clearBtn');
+        let detectedSigns = [];
 
+        // Initialize Socket.IO connection immediately
+        function initializeSocket() {
+            if (!socket) {
+                // Create socket instance with configuration
+                socket = io({
+                    reconnection: true,
+                    reconnectionDelay: 1000,
+                    reconnectionDelayMax: 5000,
+                    reconnectionAttempts: Infinity,
+                    timeout: 20000,
+                    pingTimeout: 10000,
+                    pingInterval: 5000,
+                    transports: ['websocket', 'polling']
+                });
+                
+                // Connection event handlers
+                socket.on('connect', () => {
+                    console.log('WebSocket connected successfully!');
+                    console.log('Socket ID:', socket.id);
+                });
+
+                // Prediction event handler
+                socket.on('predicted_character', (data) => {
+                    console.log('Received sign:', data);
+                    if (data && data.character) {
+                        // Only add if it's different from the last sign
+                        const lastSign = detectedSigns[detectedSigns.length - 1];
+                        if (lastSign !== data.character) {
+                            console.log('Adding new sign:', data.character);
+                            addDetectedSign(data.character);
+                        }
+                    } else {
+                        console.warn('Received invalid sign data:', data);
+                    }
+                });
+
+                // Connection status handlers
+                socket.on('disconnect', () => {
+                    console.log('WebSocket disconnected - attempting to reconnect...');
+                });
+
+                socket.on('connect_error', (error) => {
+                    console.error('Connection error:', error);
+                    setTimeout(() => {
+                        console.log('Attempting to reconnect...');
+                        socket.connect();
+                    }, 1000);
+                });
+
+                socket.on('reconnect', (attemptNumber) => {
+                    console.log('Successfully reconnected after ' + attemptNumber + ' attempts');
+                });
+            }
+        }
+
+        // Initialize socket when page loads
+        initializeSocket();
+
+        // Function to add detected sign
+        function addDetectedSign(sign) {
+            try {
+                console.log('Adding sign:', sign);
+                detectedSigns.push(sign);
+                updateMessageBox();
+            } catch (error) {
+                console.error('Error adding sign:', error);
+            }
+        }
+
+        // Function to update message box display
+        function updateMessageBox() {
+            try {
+                messageBox.textContent = detectedSigns.join(' ');
+                messageBox.scrollTop = messageBox.scrollHeight;
+                console.log('Message box updated:', messageBox.textContent);
+            } catch (error) {
+                console.error('Error updating message box:', error);
+            }
+        }
+
+        // Backspace button functionality
+        backspaceBtn.addEventListener('click', () => {
+            console.log('Backspace clicked');
+            if (detectedSigns.length > 0) {
+                detectedSigns.pop();
+                updateMessageBox();
+            }
+        });
+
+        // Clear button functionality
+        clearBtn.addEventListener('click', () => {
+            console.log('Clear clicked');
+            detectedSigns = [];
+            updateMessageBox();
+        });
+
+        // Camera controls
         startCameraButton.addEventListener('click', () => {
-            // Show the camera feed container
+            console.log('Starting camera...');
             cameraFeedContainer.style.display = 'block';
-            // Start the camera feed
             cameraFeed.src = "{{ url_for('video_feed') }}";
-            // Show the "Close Camera" button
             closeCameraButton.style.display = 'block';
-            // Hide the "Start Camera" button
             startCameraButton.style.display = 'none';
         });
 
         closeCameraButton.addEventListener('click', () => {
-            // Hide the camera feed container
+            console.log('Closing camera...');
             cameraFeedContainer.style.display = 'none';
-            // Stop the camera feed by clearing the src
             cameraFeed.src = '';
-            // Hide the "Close Camera" button
             closeCameraButton.style.display = 'none';
-            // Show the "Start Camera" button
             startCameraButton.style.display = 'block';
         });
     </script>
