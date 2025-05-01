@@ -9,8 +9,10 @@ services:
       - .:/app
     environment:
       - FLASK_ENV=development
-
-  
+      - FLASK_APP=app.py
+      - FLASK_DEBUG=1
+    command: python app.py
+    restart: always
 
 volumes:
   postgres_data:
