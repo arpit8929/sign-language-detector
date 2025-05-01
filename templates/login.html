@@ -102,16 +102,7 @@
             width: 230px;
             height: 180px;
         }
-        .g_id_signin {
-            display: flex;
-            justify-content: center;
-            align-items: center;
-
-        }
-
-        .g_id_signin > div {
-            width: 250px;
-        }
+        
 
 
         .signinContainer{
@@ -262,11 +253,8 @@
                         <div class="line"></div>
                     </div>
 
-                    <div id="g_id_onload"
-                        data-client_id=""
-                        data-callback="handleCredentialResponse">
-                    </div>
-                    <div class="g_id_signin" data-type="standard"></div>
+                    
+                    
 
                     <a href="/github/login" style="text-decoration: none; width: 60%; display: flex; align-items: center; justify-content: center; margin-top: 20px; ">
                         <div style="display: flex; align-items: center; justify-content: center; width: 45%; height: 38px; border: 1px solid #ddd; border-radius: 5px; background-color: white; cursor: pointer; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);">
@@ -292,24 +280,7 @@
             
     </div>
 
-    <script>
-        function handleCredentialResponse(response) {
-            // Send the ID token to your server for verification
-            const xhr = new XMLHttpRequest();
-            xhr.open('POST', '/google_signin');
-            xhr.setRequestHeader('Content-Type', 'application/json');
-            xhr.onload = function() {
-                if (xhr.status === 200) {
-                    // Handle successful sign-in
-                    window.location.href = '/';
-                } else {
-                    // Handle sign-in error
-                    console.error('Sign-in error:', xhr.responseText);
-                }
-            };
-            xhr.send(JSON.stringify({ id_token: response.credential }));
-        }
-    </script>
+    
 
 </body>
 
